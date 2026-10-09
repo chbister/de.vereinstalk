@@ -8,7 +8,8 @@
 #
 # PROD-Secrets (.env) liegen auf dem Host und werden NICHT angefasst, siehe
 # Schritt "Pull + Start": --env-file zeigt auf die Host-Datei
-# (per Repo-Variable PROD_ENV_FILE überschreibbar).
+# (Default /home/theuser/__dotenv__/env.de.vereinstalk, per Repo-Variablen
+# PROD_SITE_ENV_FILE bzw. PROD_ENV_FILE überschreibbar).
 
 name: site
 
@@ -93,8 +94,12 @@ jobs:
       - name: Pull + Start (PROD-Override)
         env:
           SITE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
+          # Stack-spezifische Variable hat Vorrang; PROD_ENV_FILE bleibt als
+          # Fallback (backward compat). Default: Site-Env-File auf b01.
+          SITE_ENV_FILE: ${{ vars.PROD_SITE_ENV_FILE }}
           ENV_FILE: ${{ vars.PROD_ENV_FILE }}
         run: |
+          ENV_FILE="${SITE_ENV_FILE:-$ENV_FILE}"
           ENV_FILE="${ENV_FILE:-/home/theuser/__dotenv__/env.de.vereinstalk}"
           test -f "$ENV_FILE" || { echo "::error::ENV_FILE '$ENV_FILE' fehlt auf dem Host"; exit 1; }
           docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml pull

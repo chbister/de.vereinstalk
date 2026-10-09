@@ -8,7 +8,8 @@
 #
 # PROD-Secrets (.env) liegen auf dem Host und werden NICHT angefasst, siehe
 # Schritt "Pull + Start": --env-file zeigt auf die Host-Datei
-# (per Repo-Variable PROD_ENV_FILE überschreibbar).
+# (Default /home/theuser/__dotenv__/env.de.vereinstalk.forum, per Repo-Variablen
+# PROD_FORUM_ENV_FILE bzw. PROD_ENV_FILE überschreibbar).
 
 name: forum
 
@@ -93,10 +94,33 @@ jobs:
       - name: Pull + Start (PROD-Override)
         env:
           FORUM_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
+          # Stack-spezifische Variable hat Vorrang; PROD_ENV_FILE bleibt als
+          # Fallback (backward compat). Default: Forum-Env-File auf b01.
+          FORUM_ENV_FILE: ${{ vars.PROD_FORUM_ENV_FILE }}
           ENV_FILE: ${{ vars.PROD_ENV_FILE }}
         run: |
-          ENV_FILE="${ENV_FILE:-/home/theuser/__dotenv__/env.de.vereinstalk}"
+          ENV_FILE="${FORUM_ENV_FILE:-$ENV_FILE}"
+          ENV_FILE="${ENV_FILE:-/home/theuser/__dotenv__/env.de.vereinstalk.forum}"
           test -f "$ENV_FILE" || { echo "::error::ENV_FILE '$ENV_FILE' fehlt auf dem Host"; exit 1; }
+          # Pre-Flight: Pflicht-Keys für die Auto-Installation prüfen (nur Keys,
+          # keine Werte loggen). Ohne diese Keys startet der Container mit den
+          # Compose-Defaults (FLARUM_AUTO_INSTALL=false) und installiert still
+          # NICHT — genau das sah auf PROD nach "wird nicht durchgeführt" aus.
+          missing=""
+          for key in FLARUM_AUTO_INSTALL FLARUM_URL FLARUM_ADMIN_USER FLARUM_ADMIN_EMAIL FLARUM_ADMIN_PASSWORD MARIADB_PASSWORD MARIADB_ROOT_PASSWORD FORUM_DOMAIN; do
+            grep -qE "^${key}=" "$ENV_FILE" || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::ENV_FILE '$ENV_FILE' fehlen Keys:$missing (siehe de.vereinstalk.forum/.env.example)"
+            exit 1
+          fi
+          grep -qE '^FLARUM_AUTO_INSTALL=true' "$ENV_FILE" || echo "::warning::FLARUM_AUTO_INSTALL ist nicht 'true' in $ENV_FILE — Auto-Installation wird übersprungen."
           docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml pull
           docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml up -d
           docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml ps
+          # Setup-Ausgang direkt im Job sichtbar machen (Entrypoint loggt nach
+          # [flarum], ohne Secrets).
+          echo "--- forum logs (setup) ---"
+          sleep 15
+          docker logs vereinstalk-forum --tail 60 || \
+            docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml logs forum --tail 60

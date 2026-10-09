@@ -64,7 +64,7 @@ if [ ! -f /app/config.php ]; then
         rm -f "$INSTALL_FILE"
       fi
     else
-      echo "[flarum] FLARUM_AUTO_INSTALL not enabled, use the web installer."
+      echo "[flarum] FLARUM_AUTO_INSTALL='${FLARUM_AUTO_INSTALL:-false}' (not 'true'), use the web installer."
     fi
   else
     echo "[flarum] WARNING: database unreachable, skipping setup." >&2
