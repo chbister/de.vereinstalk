@@ -5,6 +5,10 @@
 #   Image bauen, nach GHCR pushen (:<sha> + :latest), danach auf dem
 #   Self-Hosted Runner (b01) per PROD-Override starten.
 # - pull_request: nur bauen (Validierung), kein Push, kein Deploy.
+# - schedule (So 03:00 UTC): Update-Check im aktuellen :latest-Image
+#   (OS-Pakete + Composer). Nur wenn Updates anstehen, wird neu gebaut
+#   (ohne Layer-Cache, mit frischem Basis-Image) und deployed.
+#   Ohne Updates werden Build + Deploy übersprungen ("nur wenn neuer").
 #
 # PROD-Secrets (.env) liegen auf dem Host und werden NICHT angefasst, siehe
 # Schritt "Pull + Start": --env-file zeigt auf die Host-Datei
@@ -24,6 +28,11 @@ on:
     paths:
       - "de.vereinstalk.forum/**"
       - ".github/workflows/forum.yml"
+  # Wöchentlicher Rebuild (So 03:00 UTC): holt Basis-Image- und
+  # Composer-Updates (Flarum, Extensions, Sprachpakete) ins GHCR-Image.
+  # Hinweis: `paths`-Filter gelten nur für push/PR, schedule läuft immer.
+  schedule:
+    - cron: '0 3 * * 0'
   workflow_dispatch:
 
 concurrency:
@@ -35,8 +44,67 @@ env:
   IMAGE_BASE: ${{ github.repository_owner }}/vereinstalk-forum
 
 jobs:
+  check:
+    name: Update-Check
+    # Gate nur für schedule relevant: Bei push/PR/dispatch immer bauen.
+    # Bei schedule wird im aktuellen :latest-Image geprüft, ob OS- oder
+    # Composer-Updates anstehen; nur dann wird neu gebaut + deployed.
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    outputs:
+      rebuild: ${{ steps.decide.outputs.rebuild }}
+    steps:
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auf Updates prüfen
+        id: decide
+        env:
+          CURRENT_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:latest
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! docker pull "$CURRENT_IMAGE"; then
+            echo "Kein :latest-Image in GHCR -> neu bauen."
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          updates=0
+          # 1) OS-/Basis-Ebene: upgradable Debian-Pakete im aktuellen Image.
+          #    (--entrypoint umgeht den Flarum-Entrypoint, also kein DB-Wait.)
+          if docker run --rm --entrypoint bash "$CURRENT_IMAGE" -lc \
+            'apt-get update -qq && apt list --upgradable 2>/dev/null | grep -v "Listing..." | grep -q .'; then
+            echo "OS-Updates verfügbar."
+            updates=1
+          else
+            echo "Keine OS-Updates."
+          fi
+          # 2) Composer-Ebene: Flarum-Core, Extensions, Sprachpakete.
+          if docker run --rm --entrypoint bash "$CURRENT_IMAGE" -lc \
+            'composer outdated --direct --no-interaction 2>/dev/null | grep -q .'; then
+            echo "Composer-Updates verfügbar."
+            updates=1
+          else
+            echo "Keine Composer-Updates."
+          fi
+          if [ "$updates" = "1" ]; then
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Image ist aktuell -> Build + Deploy werden übersprungen."
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build + Push (GHCR)
+    needs: check
+    if: ${{ needs.check.outputs.rebuild == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,6 +129,12 @@ jobs:
           context: ./de.vereinstalk.forum
           # PRs nur bauen (kein Push nach GHCR).
           push: ${{ github.event_name != 'pull_request' }}
+          # Basis-Image immer frisch ziehen; bei schedule/dispatch zusätzlich
+          # ohne Layer-Cache bauen, damit Composer-Updates (Flarum,
+          # Extensions, Sprachpakete) einfließen. Push-Builds bleiben aus
+          # Geschwindigkeitsgründen gecached (Erneuerung via schedule).
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:latest
@@ -70,7 +144,8 @@ jobs:
   deploy:
     name: Deploy (b01)
     needs: build
-    if: github.event_name != 'pull_request'
+    # Bei schedule ohne Updates wurde build geskippt -> dann auch kein Deploy.
+    if: ${{ github.event_name != 'pull_request' && needs.build.result == 'success' }}
     runs-on: [self-hosted, production, vereinstalk]
     permissions:
       contents: read

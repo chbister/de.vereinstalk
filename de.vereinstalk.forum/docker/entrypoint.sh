@@ -73,6 +73,18 @@ else
   echo "[flarum] config.php present, skipping setup."
 fi
 
+# Ausstehende Core-/Extension-Migrationen anwenden (z. B. nach Image-Updates
+# mit neuer Flarum-Version; `composer update` führt diese NICHT aus).
+# Erneutes Ausführen ist harmlos: bereits angewendete Migrationen laufen
+# nicht nochmal. Ein Fehlschlag darf den Start nie blockieren.
+if [ -f /app/config.php ]; then
+  if gosu application php /app/flarum migrate -n; then
+    echo "[flarum] Migrations applied."
+  else
+    echo "[flarum] WARNING: migrate failed, continuing anyway." >&2
+  fi
+fi
+
 # Core-/Extension-Assets (JS/CSS/Fonts) bei jedem Start neu publizieren.
 # /app/public/assets liegt auf einem Volume und würde sonst nach Rebuilds
 # veraltete Dateien über den frischen Build legen (stille 404s, z. B. Fonts).
