@@ -71,7 +71,8 @@ jobs:
     name: Deploy (b01)
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, production, vereinstalk]
+    # Site bleibt auf b01 (Runner-Label b01 pinnt den Host).
+    runs-on: [self-hosted, production, vereinstalk, b01]
     permissions:
       contents: read
       packages: read

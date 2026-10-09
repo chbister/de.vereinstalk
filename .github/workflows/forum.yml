@@ -1,16 +1,17 @@
-# Forum: Build -> GHCR -> Deploy auf b01.
+# Forum: Build -> GHCR -> Deploy auf b03.
 #
 # Trigger:
 # - push auf main (z. B. gemergter PR) mit Änderung unter de.vereinstalk.forum/:
 #   Image bauen, nach GHCR pushen (:<sha> + :latest), danach auf dem
-#   Self-Hosted Runner (b01) per PROD-Override starten.
+#   Self-Hosted Runner (b03) per PROD-Override starten.
+#   (Die statische Site läuft separat weiter auf b01, siehe site.yml.)
 # - pull_request: nur bauen (Validierung), kein Push, kein Deploy.
 # - schedule (So 03:00 UTC): Update-Check im aktuellen :latest-Image
 #   (OS-Pakete + Composer). Nur wenn Updates anstehen, wird neu gebaut
 #   (ohne Layer-Cache, mit frischem Basis-Image) und deployed.
 #   Ohne Updates werden Build + Deploy übersprungen ("nur wenn neuer").
 #
-# PROD-Secrets (.env) liegen auf dem Host und werden NICHT angefasst, siehe
+# PROD-Secrets (.env) liegen auf b03 und werden NICHT angefasst, siehe
 # Schritt "Pull + Start": --env-file zeigt auf die Host-Datei
 # (Default /home/theuser/__dotenv__/env.de.vereinstalk.forum, per Repo-Variablen
 # PROD_FORUM_ENV_FILE bzw. PROD_ENV_FILE überschreibbar).
@@ -142,11 +143,12 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy (b01)
+    name: Deploy (b03)
     needs: build
     # Bei schedule ohne Updates wurde build geskippt -> dann auch kein Deploy.
     if: ${{ github.event_name != 'pull_request' && needs.build.result == 'success' }}
-    runs-on: [self-hosted, production, vereinstalk]
+    # Forum läuft auf b03 (Runner-Label b03 pinnt den Host).
+    runs-on: [self-hosted, production, vereinstalk, b03]
     permissions:
       contents: read
       packages: read
@@ -170,7 +172,7 @@ jobs:
         env:
           FORUM_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
           # Stack-spezifische Variable hat Vorrang; PROD_ENV_FILE bleibt als
-          # Fallback (backward compat). Default: Forum-Env-File auf b01.
+          # Fallback (backward compat). Default: Forum-Env-File auf b03.
           FORUM_ENV_FILE: ${{ vars.PROD_FORUM_ENV_FILE }}
           ENV_FILE: ${{ vars.PROD_ENV_FILE }}
         run: |
