@@ -1,0 +1,42 @@
+# PROD-Override für das Forum.
+#
+# Enthält ausschließlich PROD-Delta (GHCR-Image, Traefik-Labels,
+# kein Ports-Publishing). Base-Datei `docker-compose.yml` bleibt
+# DEV-fähig und ohne Traefik-Labels.
+#
+# Start DEV:
+#   docker compose up -d --build
+#
+# Start PROD (auf dem Server, mit Prod-.env):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  forum:
+    # In PROD läuft das per CI gebaute GHCR-Image (kein Build auf dem Host).
+    # Der Deploy-Job setzt FORUM_IMAGE=...:<commit-sha>; Default ist :latest.
+    image: ${FORUM_IMAGE:-ghcr.io/chbister/vereinstalk-forum:latest}
+    # In PROD kein Host-Port-Publishing: Traefik routet über das
+    # gemeinsame Netzwerk direkt auf Port 80.
+    ports: !reset []
+    expose:
+      - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vereinstalk-forum.rule=Host(`${FORUM_DOMAIN:-forum.vereinstalk.de}`)"
+      - "traefik.http.routers.vereinstalk-forum.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.vereinstalk-forum.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.vereinstalk-forum.loadbalancer.server.port=80"
+    networks:
+      - default
+      - edge
+
+  mariadb:
+    # Sicherstellen, dass Traefik die DB ignoriert, selbst wenn der
+    # Docker-Provider mit exposedbydefault=true läuft.
+    labels:
+      - "traefik.enable=false"
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK_NAME:-dev-shared-network}

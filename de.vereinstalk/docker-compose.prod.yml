@@ -1,0 +1,33 @@
+# PROD-Override für die statische Seite (vereinstalk.de).
+#
+# Enthält ausschließlich PROD-Delta (Traefik-Labels, kein Ports-Publishing).
+# Base-Datei `docker-compose.yml` bleibt DEV-fähig und ohne Traefik-Labels.
+#
+# Start DEV:
+#   docker compose up -d
+#
+# Start PROD (auf dem Server, mit Prod-.env):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Hinweis: `docker-compose.override.yml` (lokal, git-ignoriert) wird von
+# Compose automatisch geladen und ist für lokale DEV-Anpassungen gedacht —
+# NICHT für PROD. PROD immer explizit mit `-f docker-compose.prod.yml`.
+
+services:
+  vereinstalk-static-site:
+    # In PROD läuft das per CI gebaute GHCR-Image (kein Build auf dem Host).
+    # Der Deploy-Job setzt SITE_IMAGE=...:<commit-sha>; Default ist :latest.
+    image: ${SITE_IMAGE:-ghcr.io/chbister/vereinstalk-site:latest}
+    # In PROD kein Host-Port-Publishing: Traefik routet über das
+    # `edge`-Netzwerk direkt auf Port 80. `!reset` entfernt die aus der
+    # Base-Datei geerbten `ports` (Compose Merge-Verhalten).
+    ports: !reset []
+    expose:
+      - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vereinstalk-static-site.rule=Host(`${SITE_DOMAIN:-vereinstalk.de}`)"
+      - "traefik.http.routers.vereinstalk-static-site.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.vereinstalk-static-site.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.services.vereinstalk-static-site.loadbalancer.server.port=80"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"

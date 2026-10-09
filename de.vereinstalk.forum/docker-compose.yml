@@ -14,7 +14,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: de.vereinstalk.forum:latest
+    # Lokal: `docker compose up -d --build` baut das Image.
+    # CI/PROD: per FORUM_IMAGE auf das GHCR-Image zeigen (Deploy pinnt den SHA).
+    image: ${FORUM_IMAGE:-ghcr.io/chbister/vereinstalk-forum:latest}
     container_name: vereinstalk-forum
     restart: unless-stopped
     ports:

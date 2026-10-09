@@ -1,0 +1,102 @@
+# Forum: Build -> GHCR -> Deploy auf b01.
+#
+# Trigger:
+# - push auf main (z. B. gemergter PR) mit Änderung unter de.vereinstalk.forum/:
+#   Image bauen, nach GHCR pushen (:<sha> + :latest), danach auf dem
+#   Self-Hosted Runner (b01) per PROD-Override starten.
+# - pull_request: nur bauen (Validierung), kein Push, kein Deploy.
+#
+# PROD-Secrets (.env) liegen auf dem Host und werden NICHT angefasst, siehe
+# Schritt "Pull + Start": --env-file zeigt auf die Host-Datei
+# (per Repo-Variable PROD_ENV_FILE überschreibbar).
+
+name: forum
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "de.vereinstalk.forum/**"
+      - ".github/workflows/forum.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "de.vereinstalk.forum/**"
+      - ".github/workflows/forum.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: forum-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ${{ github.repository_owner }}/vereinstalk-forum
+
+jobs:
+  build:
+    name: Build + Push (GHCR)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + Push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./de.vereinstalk.forum
+          # PRs nur bauen (kein Push nach GHCR).
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy (b01)
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, production, vereinstalk]
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        working-directory: de.vereinstalk.forum
+    steps:
+      - name: Checkout (exakt der gebaute Commit)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull + Start (PROD-Override)
+        env:
+          FORUM_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_BASE }}:${{ github.sha }}
+          ENV_FILE: ${{ vars.PROD_ENV_FILE }}
+        run: |
+          ENV_FILE="${ENV_FILE:-/home/theuser/__dotenv__/env.de.vereinstalk}"
+          test -f "$ENV_FILE" || { echo "::error::ENV_FILE '$ENV_FILE' fehlt auf dem Host"; exit 1; }
+          docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml pull
+          docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml up -d
+          docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml ps

@@ -1,6 +1,11 @@
 services:
   vereinstalk-static-site:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Lokal: `docker compose up -d --build` baut das Image.
+    # CI/PROD: per SITE_IMAGE auf das GHCR-Image zeigen (Deploy pinnt den SHA).
+    image: ${SITE_IMAGE:-ghcr.io/chbister/vereinstalk-site:latest}
     container_name: vereinstalk-static-site
     restart: unless-stopped
     ports:
