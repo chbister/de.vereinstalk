@@ -1,0 +1,74 @@
+# Flarum + MariaDB (empfohlen: MariaDB 11.8 LTS bzw. MySQL 8.4 LTS,
+# siehe https://docs.flarum.org/install/#server-requirements)
+#
+# Start:
+#   docker compose up -d --build
+# Mit FLARUM_AUTO_INSTALL=true (siehe .env) installiert sich das Forum beim
+# ersten Start selbst; ohne Auto-Install im Browser den Web-Installer nutzen.
+#
+# Alle sensiblen Werte können per Umgebung/.env überschrieben werden, z. B.:
+#   MARIADB_ROOT_PASSWORD=... MARIADB_PASSWORD=... FLARUM_URL=https://forum.example.com
+
+services:
+  forum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: de.vereinstalk.forum:latest
+    container_name: vereinstalk-forum
+    restart: unless-stopped
+    ports:
+      - "${FORUM_PORT:-8080}:80"
+    environment:
+      WEB_DOCUMENT_ROOT: /app/public
+      FLARUM_URL: ${FLARUM_URL:-http://localhost:8081}
+      FLARUM_AUTO_INSTALL: ${FLARUM_AUTO_INSTALL:-false}
+      FLARUM_TITLE: ${FLARUM_TITLE:-Vereinstalk}
+      FLARUM_DEBUG: ${FLARUM_DEBUG:-false}
+      FLARUM_ADMIN_USER: ${FLARUM_ADMIN_USER:-}
+      FLARUM_ADMIN_EMAIL: ${FLARUM_ADMIN_EMAIL:-}
+      FLARUM_ADMIN_PASSWORD: ${FLARUM_ADMIN_PASSWORD:-}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-flarum}
+      MARIADB_USER: ${MARIADB_USER:-flarum}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-changeme}
+      FLARUM_DB_HOST: ${FLARUM_DB_HOST:-mariadb}
+      FLARUM_DB_PORT: ${FLARUM_DB_PORT:-3306}
+      FLARUM_DB_PREFIX: ${FLARUM_DB_PREFIX:-}
+      FLARUM_THEME_PRIMARY: ${FLARUM_THEME_PRIMARY:-}
+      FLARUM_THEME_SECONDARY: ${FLARUM_THEME_SECONDARY:-}
+      FLARUM_WELCOME_TITLE: ${FLARUM_WELCOME_TITLE:-}
+      FLARUM_WELCOME_MESSAGE: ${FLARUM_WELCOME_MESSAGE:-}
+      FLARUM_DESCRIPTION: ${FLARUM_DESCRIPTION:-}
+      FLARUM_DEFAULT_LOCALE: ${FLARUM_DEFAULT_LOCALE:-de}
+      FLARUM_ENABLE_EXTENSIONS: ${FLARUM_ENABLE_EXTENSIONS:-flarum-lang-german,flarum-lang-french,flarum-lang-english}
+    volumes:
+      # Persistenz für Uploads (Avatare, Logos) und Cache/Logs/Sessions
+      - flarum-assets:/app/public/assets
+      - flarum-storage:/app/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:11.8
+    container_name: vereinstalk-forum-db
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-changeme-root}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-flarum}
+      MARIADB_USER: ${MARIADB_USER:-flarum}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-changeme}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  flarum-assets:
+  flarum-storage:
+  mariadb-data:

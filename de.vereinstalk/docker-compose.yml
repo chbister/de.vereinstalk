@@ -1,0 +1,17 @@
+services:
+  vereinstalk-static-site:
+    image: nginx:alpine
+    container_name: vereinstalk-static-site
+    restart: unless-stopped
+    ports:
+      - "${SITE_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docs:/usr/share/nginx/html:ro
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK_NAME:-dev-shared-network}

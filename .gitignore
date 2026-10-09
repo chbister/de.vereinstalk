@@ -1,0 +1,30 @@
+# === Secrets / Env ===
+# Alle .env-Dateien in allen Unterprojekten ignorieren.
+# Nur exakt `.env` (nicht `.env.example`, das bleibt versioniert).
+**/.env
+.env
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === IDE / Editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Docker / Compose ===
+docker-compose.override.yml
+docker-compose.local.yml
+.env.local
+
+# === Logs / Temp ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+temp/
