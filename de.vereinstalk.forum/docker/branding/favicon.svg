@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">  <!-- Hintergrund Squircle -->
+  <rect x="2" y="2" width="36" height="36" rx="8" fill="#1C1C1A"/>
+
+  <!-- Oberer Ball (Blau) mit Ring -->
+  <circle cx="14" cy="14" r="5" fill="none" stroke="#00AEEF" stroke-width="2.5"/>
+  <circle cx="14" cy="14" r="2" fill="#0077A6"/>
+
+  <!-- Unterer Ball (Orange) mit Ring -->
+  <circle cx="26" cy="26" r="5" fill="none" stroke="#F53003" stroke-width="2.5"/>
+  <circle cx="26" cy="26" r="2" fill="#D92903"/>
+
+  <!-- Zentrales Teilerzeichen (Diagonale) -->
+  <line x1="19" y1="19" x2="21" y2="21" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Dynamische Bewegungslinien -->
+  <circle cx="14" cy="14" r="7" fill="none" stroke="#00AEEF" stroke-width="1" opacity="0.4"/>
+  <circle cx="26" cy="26" r="7" fill="none" stroke="#F53003" stroke-width="1" opacity="0.4"/>
+</svg>

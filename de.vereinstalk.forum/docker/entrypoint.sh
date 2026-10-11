@@ -97,6 +97,32 @@ if [ -f /app/config.php ]; then
   fi
 fi
 
+# Branding-Favicon (KickFriends-Design, vgl. statische Seite
+# de.vereinstalk/docs/assets/favicon.svg) in das Assets-Volume spiegeln und
+# als `favicon_path`-Setting setzen (Admin-Panel -> Erscheinungsbild).
+# Der Favicon-Upload im Admin-Panel akzeptiert kein SVG (nur Rasterformate),
+# daher wird die Datei hier direkt abgelegt und das Setting per Tinker
+# gesetzt. Fester Dateiname, damit der Sync idempotent ist; läuft bei jedem
+# Start (enforced, wie die Theme-Farben unten) — ein manueller Favicon-Upload
+# im Admin-Panel wird beim nächsten Start überschrieben.
+BRANDING_SRC=/usr/local/share/flarum-branding/favicon.svg
+BRANDING_NAME=favicon-kickfriends.svg
+if [ -f /app/config.php ] && [ -f "$BRANDING_SRC" ]; then
+  mkdir -p /app/public/assets
+  if ! cmp -s "$BRANDING_SRC" "/app/public/assets/$BRANDING_NAME" 2>/dev/null; then
+    cp "$BRANDING_SRC" "/app/public/assets/$BRANDING_NAME"
+    chown application:application "/app/public/assets/$BRANDING_NAME"
+    echo "[flarum] Favicon seeded: $BRANDING_NAME"
+  fi
+  gosu application php /app/flarum tinker <<'TINKER_EOF' 2>&1 | grep -E 'FAVICON (SET|KEEP)' || true
+$s = app(Flarum\Settings\SettingsRepositoryInterface::class);
+$want = 'favicon-kickfriends.svg';
+$cur = $s->get('favicon_path');
+if ($cur !== $want) { $s->set('favicon_path', $want); echo "FAVICON SET $want (was: ".($cur ?: '(empty)').")\n"; }
+else { echo "FAVICON KEEP $want\n"; }
+TINKER_EOF
+fi
+
 # Theme-Farben und Willkommensnachricht aus der Umgebung übernehmen.
 # Nur gesetzte Werte werden geschrieben und nur bei Abweichung — leere Vars
 # lassen manuelle Admin-Änderungen in Ruhe. Farben brauchen gültiges Hex-Format
