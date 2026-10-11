@@ -36,9 +36,10 @@ RUN rm -rf /tmp/flarum-build \
     && chmod 775 -R /app/storage /app/public/assets
 
 # FoF-Extensions (Aktivierung per CLI nach dem Start, Zustand liegt in der DB).
-# Hinweis: fof/passport ist NICHT enthalten — letzte Version 1.1.1 braucht
-# flarum/core ^1.2.0 und ist inkompatibel mit 2.x (kein 2.x-Release vorhanden).
-RUN composer require fof/share-social fof/drafts:"*" fof/moderator-notes fof/polls fof/oauth --no-interaction --no-progress --no-audit \
+# Hinweis: fof/passport und fof/moderator-notes sind NICHT enthalten —
+# letzte Versionen brauchen flarum/core ^1.x und sind inkompatibel mit
+# 2.x (kein 2.x-Release vorhanden, Stand 2026-10-11).
+RUN composer require fof/share-social fof/drafts:"*" fof/polls fof/oauth --no-interaction --no-progress --no-audit \
     && chown -R application:application /app/vendor /app/composer.json /app/composer.lock
 
 # Sprachpakete: alle Packs der flarum-lang-Organisation (Stand 2026-10-09),
