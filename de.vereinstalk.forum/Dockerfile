@@ -75,6 +75,12 @@ RUN php /tmp/apply-flarum-translator-fix.php \
     && php -l /app/vendor/flarum/core/src/Locale/Translator.php \
     && rm /tmp/apply-flarum-translator-fix.php
 
+# Branding-Assets (Favicon im KickFriends-Design, siehe docker/branding/).
+# Liegen bewusst NICHT direkt in /app/public/assets: Dort liegt ein Volume,
+# das den Image-Inhalt verdecken würde. Der Entrypoint kopiert sie beim Start
+# nach /app/public/assets und setzt das `favicon_path`-Setting (enforced).
+COPY docker/branding /usr/local/share/flarum-branding
+
 # Flarum-URL-Rewriting für Nginx (entspricht `include /path/to/flarum/.nginx.conf;`)
 COPY docker/nginx-flarum.conf /opt/docker/etc/nginx/vhost.common.d/10-flarum.conf
 
